@@ -1,7 +1,7 @@
 # TCRconv
 TCRconv is a deep learning model for predicting recognition between T cell receptors and epitopes. TCRconv is formulated as a multilabel predictor and uses protBERT embeddings for the TCRs and convolutional neural networks for the prediction.
 
-![TCRconv pipeline](TCRconv_pipeline.pdf)
+![TCRconv pipeline](TCRconv-pipeline.jpeg)
 
 ## Usage
 Do the following step to use TCRconv
