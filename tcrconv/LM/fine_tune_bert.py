@@ -78,7 +78,7 @@ def create_bert_further_tuning_files(relative_data_path="."):
         Extracts raw sequences for further tuning the BERT model on TCR-only data. The 15% masking is done
         in the dataset class, later
     """
-    data = pd.read_csv(os.path.join(relative_data_path, "vdj_human_unique_longs.csv"))
+    data = pd.read_csv(os.path.join(relative_data_path, "data/vdj_human_uniques_long.csv"))
     seqs = data['long'].values
     train_format_seqs = []
     for s in seqs:
@@ -90,9 +90,9 @@ def create_bert_further_tuning_files(relative_data_path="."):
                                         [train_format_seqs[i] for i in test_seqs], \
                                         [train_format_seqs[i] for i in train_seqs]
     valid_data, test_data, train_data = pd.DataFrame(valid_data), pd.DataFrame(test_data), pd.DataFrame(train_data)
-    train_data.to_csv(os.path.join(relative_data_path,"tcr_seqs_train_df.csv"))
-    valid_data.to_csv(os.path.join(relative_data_path,"tcr_seqs_dev_df.csv"))
-    test_data.to_csv(os.path.join(relative_data_path, "tcr_seqs_test_df.csv"))
+    train_data.to_csv(os.path.join(relative_data_path,"data/tcr_seqs_train_df.csv"))
+    valid_data.to_csv(os.path.join(relative_data_path,"data/tcr_seqs_dev_df.csv"))
+    test_data.to_csv(os.path.join(relative_data_path, "data/tcr_seqs_test_df.csv"))
 
 class EpitopeClassifierDataset(Dataset):
     """
@@ -764,19 +764,19 @@ class ProtBertClassifier(pl.LightningModule):
         )
         parser.add_argument(
             "--train_csv",
-            default="tcr_seqs_train_df.csv",
+            default="data/tcr_seqs_train_df.csv",
             type=str,
             help="Path to the file containing the train data.",
         )
         parser.add_argument(
             "--dev_csv",
-            default="tcr_seqs_dev_df.csv",
+            default="data/tcr_seqs_dev_df.csv",
             type=str,
             help="Path to the file containing the dev data.",
         )
         parser.add_argument(
             "--test_csv",
-            default="tcr_seqs_test_df.csv",
+            default="data/tcr_seqs_test_df.csv",
             type=str,
             help="Path to the file containing the dev data.",
         )

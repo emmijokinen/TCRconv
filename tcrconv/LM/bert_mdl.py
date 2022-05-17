@@ -97,27 +97,6 @@ class ProtBertClassifier(pl.LightningModule):
         self.tokenizer = BertTokenizer(self.vocabFilePath, do_lower_case=False)
 
 
-    #@staticmethod
-    #def get_epitope_weights():
-    #    vdj_long_data = pd.read_csv("../data/vdj_human_unique_longs.csv")
-    #    epitope2ind = pickle.load(open("data/lbl2vocab.bin", "rb"))
-    #    epitope2count = {}
-    #    for ep in vdj_long_data['epitope'].values:
-    #        if ep in epitope2count:
-    #            epitope2count[ep] += 1
-    #        else:
-    #            epitope2count[ep] = 1
-    #    ind_ep_2weights = {}
-    #    n_samples = len(vdj_long_data['epitope'].values)
-    #    n_classes = len(epitope2ind.keys())
-    #    for epitope, ind in epitope2ind.items():
-    #        ind_ep_2weights[ind] = n_samples / (n_classes * epitope2count[epitope])
-    #    ordered_weights = []
-    #    for ind in range(n_classes):
-    #        ordered_weights.append(ind_ep_2weights[ind])
-    #    return ordered_weights
-
-
     def __build_loss(self):
         """ Initializes the loss function/s. """
         self._loss = nn.CrossEntropyLoss()

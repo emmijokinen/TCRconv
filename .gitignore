@@ -1,0 +1,5 @@
+tcrconv/LM/data/tcr_seqs_dev_df.csv
+tcrconv/LM/data/tcr_seqs_test_df.csv
+tcrconv/LM/data/tcr_seqs_train_df.csv
+tcrconv/LM/__pycache__
+tcrconv/LM/experiments/
