@@ -1,0 +1,15 @@
+Species	Gene	Allele	AccNum	Functionality	nt_seq
+Homosap	TRBJ1-1	TRBJ1-1*01	K02545	F	tgaacactgaagctttctttggacaaggcaccagactcacagttgtag
+Homosap	TRBJ1-2	TRBJ1-2*01	K02545	F	ctaactatggctacaccttcggttcggggaccaggttaaccgttgtag
+Homosap	TRBJ1-3	TRBJ1-3*01	M14158	F	ctctggaaacaccatatattttggagagggaagttggctcactgttgtag
+Homosap	TRBJ1-4	TRBJ1-4*01	M14158	F	caactaatgaaaaactgttttttggcagtggaacccagctctctgtcttgg
+Homosap	TRBJ1-5	TRBJ1-5*01	M14158	F	tagcaatcagccccagcattttggtgatgggactcgactctccatcctag
+Homosap	TRBJ1-6	TRBJ1-6*01	M14158	F	ctcctataattcacccctccactttgggaatgggaccaggctcactgtgacag
+Homosap	TRBJ1-6	TRBJ1-6*02	L36092	F	ctcctataattcacccctccactttgggaacgggaccaggctcactgtgacag
+Homosap	TRBJ2-1	TRBJ2-1*01	X02987	F	ctcctacaatgagcagttcttcgggccagggacacggctcaccgtgctag
+Homosap	TRBJ2-2	TRBJ2-2*01	X02987	F	cgaacaccggggagctgttttttggagaaggctctaggctgaccgtactgg
+Homosap	TRBJ2-3	TRBJ2-3*01	X02987	F	agcacagatacgcagtattttggcccaggcacccggctgacagtgctcg
+Homosap	TRBJ2-4	TRBJ2-4*01	X02987	F	agccaaaaacattcagtacttcggcgccgggacccggctctcagtgctgg
+Homosap	TRBJ2-5	TRBJ2-5*01	X02987	F	accaagagacccagtacttcgggccaggcacgcggctcctggtgctcg
+Homosap	TRBJ2-6	TRBJ2-6*01	X02987	F	ctctggggccaacgtcctgactttcggggccggcagcaggctgaccgtgctgg
+Homosap	TRBJ2-7	TRBJ2-7*01	M14159	F	ctcctacgagcagtacttcgggccgggcaccaggctcacggtcacag
