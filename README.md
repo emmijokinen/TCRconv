@@ -4,7 +4,7 @@ TCRconv is a deep learning model for predicting recognition between T cell recep
 ![TCRconv pipeline](TCRconv-pipeline.jpeg)
 
 ## Installation
-Do the following step to use TCRconv
+Do the following step to use TCRconv. Python 3.5+ is required.
 
 **Optional: create virtual env and activate it** \
 python3 -m venv tcrconv-env \
@@ -20,7 +20,7 @@ pip install .
 pip install -e .
 
 ## Usage
-We recommend to use gpus with TCRconv, especially when computing embeddings with protBERT, 
+(After preprocessing the data) We recommend to use gpus with TCRconv, especially when computing embeddings with protBERT.
 ### Preprocessing data
 * We have used data downloaded from from VDJdb \[2\]
 * preprocess-data.ipynb shows how this type of data can be utilized and processed for TCRconv. 
@@ -42,7 +42,7 @@ We recommend to use gpus with TCRconv, especially when computing embeddings with
   * Predictions can be made with a precomputed embedding dictionary (This is probably better if you plan to use the same embeddings multiple times)
   * It is also possible to compute the embeddings on the go (This is good if you want to use the embeddings only once or have massive amounts of data)
   * On commandline, run with --help to see descriptions for the possible inputs
-  * For an example, see scripts/r_cv.sh
+  * For an example, see scripts/pred_emb.sh and scripts/pred_lm.sh
 
 
 ## References
