@@ -47,9 +47,8 @@ pip install -e .
 
 
 ## References
-\[1\] Jokinen, E., Dumitrescu, A., Huuhtanen, J., Heinonen M., Gligorijevic, V., Bonneau, R., Mustjoki, S., Lähdesmäki, H. Determining recognition between T cell receptors and epitopes using contextualized motifs, *submitted* (2022)
+\[1\] Jokinen, E., Dumitrescu, A., Huuhtanen, J., Heinonen M., Gligorijevic, V., Bonneau, R., Mustjoki, S., Lähdesmäki, H. Determining recognition between T cell receptors and epitopes using contextualized motifs, *submitted* (2022) \
 \[2\] Bagaev, Dmitry V., et al. VDJdb in 2019: database extension, new analysis infrastructure and a T-cell receptor motif compendium. *Nucleic Acids Research* **48.D1** (2020): D1057-D1062. https://vdjdb.cdr3.net \
-\[3\] Lefranc, Marie-Paule, et al. "IMGT, the international ImMunoGeneTics information system." *Nucleic acids research* **37.suppl_1** (2009): D1006-D1012. https://www.imgt.org
 
 ## Predictor
 Codes for the multilabel predictor.
