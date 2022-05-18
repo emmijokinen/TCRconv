@@ -3,3 +3,7 @@ tcrconv/LM/data/tcr_seqs_test_df.csv
 tcrconv/LM/data/tcr_seqs_train_df.csv
 tcrconv/LM/__pycache__
 tcrconv/LM/experiments/
+tcrconv/LM/data/epitope_seq_train.csv
+tcrconv/LM/data/epitope_seq_test.csv
+tcrconv/LM/data/epitope_seq_valid.csv
+.idea/

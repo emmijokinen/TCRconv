@@ -58,7 +58,7 @@ def create_epitope_tuning_files(relative_data_path):
             all_val_inds.extend(val_inds_)
         return all_train_inds, all_val_inds, all_test_inds
 
-    epitope_dataset = pd.read_csv(relative_data_path+'vdj_human_unique_longs.csv')
+    epitope_dataset = pd.read_csv(relative_data_path+'data/vdj_human_uniques_long.csv')
     epitope, sequences = epitope_dataset['epitope'].values, epitope_dataset['long'].values
     all_train_inds, all_val_inds, all_test_inds = split_data(epitope)
     train_seq, train_ep, test_seq, test_ep = sequences[all_train_inds], epitope[all_train_inds], \
@@ -68,9 +68,9 @@ def create_epitope_tuning_files(relative_data_path):
     test_df = pd.DataFrame(test_seq, test_ep)
     valid_df = pd.DataFrame(test_seq, test_ep)
 
-    train_df.to_csv(relative_data_path + "epitope_seq_train.csv")
-    test_df.to_csv(relative_data_path + "epitope_seq_test.csv")
-    valid_df.to_csv(relative_data_path + "epitope_seq_valid.csv")
+    train_df.to_csv(relative_data_path + "data/epitope_seq_train.csv")
+    test_df.to_csv(relative_data_path + "data/epitope_seq_test.csv")
+    valid_df.to_csv(relative_data_path + "data/epitope_seq_valid.csv")
 
 
 def create_bert_further_tuning_files(relative_data_path="."):
@@ -102,7 +102,7 @@ class EpitopeClassifierDataset(Dataset):
     """
     def __init__(self, raw_path, file) -> None:
         self.data = []
-        vocab = pickle.load(open(raw_path + "lbl2vocab.bin", "rb"))
+        vocab = pickle.load(open(raw_path + "data/epitope2labels.bin", "rb"))
         path = raw_path+file
         self.init_dataset(path, vocab)
 
@@ -307,8 +307,8 @@ class ProtBertClassifier(pl.LightningModule):
 
     @staticmethod
     def get_epitope_weights(relative_data_path):
-        vdj_long_data = pd.read_csv(os.path.join(relative_data_path, "vdj_human_unique_longs.csv"))
-        epitope2ind = pickle.load(open(os.path.join(relative_data_path ,"lbl2vocab.bin"), "rb"))
+        vdj_long_data = pd.read_csv(os.path.join(relative_data_path, "data/vdj_human_uniques_long.csv"))
+        epitope2ind = pickle.load(open(os.path.join(relative_data_path ,"data/epitope2labels.bin"), "rb"))
         epitope2count = {}
         for ep in vdj_long_data['epitope'].values:
             if ep in epitope2count:
@@ -938,7 +938,7 @@ def create_tuning_data(hparams):
         hparams.special_tokens = True
     if hparams.create_data:
         if hparams.tune_epitope_specificity:
-            hparams.test_csv, hparams.train_csv, hparams.dev_csv = "epitope_seq_test.csv", "epitope_seq_train.csv", "epitope_seq_valid.csv"
+            hparams.test_csv, hparams.train_csv, hparams.dev_csv = "data/epitope_seq_test.csv", "data/epitope_seq_train.csv", "data/epitope_seq_valid.csv"
             create_epitope_tuning_files(hparams.relative_data_path)
         else:
             create_bert_further_tuning_files(hparams.relative_data_path)
