@@ -154,8 +154,8 @@ def get_parameter_dict(predict=False):
 
         p_model.add_argument('--model_file', type=str, required=True,
                             help='filename for model.')
-        p_model.add_argument('--LM_file', type=str, default='None',
-                            help='filename for LM. LM or embeddings required with mode predict.')
+        p_model.add_argument('--use_LM', type=str2bool, default=False,
+                            help='If True, protBERT language model is used to compute TCR embeddings on the go. If False, precomputed embeddings are used and filename for at least one embedding dictionary is required.')
         p_model.add_argument('--num_features', type=int,default=1024,
                             help='Number of features in embeddings. If a bert model is used, this should be 1024. If a bert model with one-hot encoding is used, this should be 1045 (1024+21)')
         p_data.add_argument('--input_type', type=str, default='tcr+cdr3',
@@ -236,8 +236,8 @@ def get_parameter_dict(predict=False):
 
         if p['two_chains'] and p['h_cdr32'].lower()=='none' and p['h_long2'].lower()=='none':
             parser.error('If two chains are used, give column name for CDR3s or long sequences of the 2nd chain.')
-        if (p['LM_file'].lower()=='none') == (p['embedfile1'].lower()=='none'):
-            parser.error('Give either an LM or embedding file (for each chain).')
+        if (p['use_LM']) == (p['embedfile1'].lower()!='none'):
+            parser.error('Either set use_LM to True or give embedding file (for each chain).')
 
         # Dropouts are not used when the model is evaluated. These are just fillers
         p['dropouts']=[0,0]
