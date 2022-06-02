@@ -50,7 +50,7 @@ Torch state dictionaries for models trained with the VDJdb-b-small, VDJdb-b-larg
 
 
 ## References
-\[1\] Jokinen, E., Dumitrescu, A., Huuhtanen, J., Heinonen M., Gligorijevic, V., Bonneau, R., Mustjoki, S., Lähdesmäki, H. Determining recognition between T cell receptors and epitopes using contextualized motifs, *submitted* (2022) \
+\[1\] Jokinen, E., Dumitrescu, A., Huuhtanen, J., Heinonen M., Gligorijevic, V., Bonneau, R., Mustjoki, S., Lähdesmäki, H. Determining recognition between T cell receptors and epitopes using contextualized motifs, *submitted* (2022). Preprint available at bioRxiv (https://doi.org/10.1101/2022.05.23.493034) \
 \[2\] Bagaev, Dmitry V., et al. VDJdb in 2019: database extension, new analysis infrastructure and a T-cell receptor motif compendium. *Nucleic Acids Research* **48.D1** (2020): D1057-D1062. https://vdjdb.cdr3.net 
 
 ## Predictor
