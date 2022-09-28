@@ -37,7 +37,7 @@ def get_protseqs_ntseqs(chain='B'):
     """returns sequence dictioaries for genes: protseqsV, protseqsJ, nucseqsV, nucseqsJ"""
     seq_dicts=[]
     for gene,type in zip(['v','j','v','j'],['aa','aa','nt','nt']):
-        name = 'data/'+'tr'+chain.lower()+gene+'s_'+type+'.tsv'
+        name = 'preprocessing/data/'+'tr'+chain.lower()+gene+'s_'+type+'.tsv'
         sdict = file2dict(name,key_fields=['Allele'],store_fields=[type+'_seq'])
         for g in sdict:
             sdict[g]=sdict[g][0][0]
