@@ -1,4 +1,7 @@
+
 import pickle
+
+import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 from torch import optim
@@ -63,6 +66,13 @@ class ProtBertClassifier(pl.LightningModule):
         configUrl = 'https://www.dropbox.com/s/d3yw7v4tvi5f4sk/bert_config.json?dl=1'
         vocabUrl = 'https://www.dropbox.com/s/jvrleji50ql5m5i/vocab.txt?dl=1'
 
+        # TODO Remove hardcoded paths after u finished implementing saliency-map extraaction
+        if os.path.exists('/scratch/work/dumitra1'):
+            self.modelFolderPath = "/home/dumitra1/work/covid_tcr_protein_embeddings/models/ProtBert"
+            self.vocabFilePath = os.path.join(self.modelFolderPath, 'vocab.txt')
+        elif os.path.exists("/home/alex"):
+            self.modelFolderPath = '/home/alex/Desktop/covid_tcr_protein_embeddings/models/ProtBert'
+            self.vocabFilePath = os.path.join(self.modelFolderPath, 'vocab.txt')
         modelFolderPath = self.modelFolderPath
         modelFilePath = os.path.join(modelFolderPath, 'pytorch_model.bin')
         configFilePath = os.path.join(modelFolderPath, 'config.json')
@@ -186,7 +196,7 @@ class ProtBertClassifier(pl.LightningModule):
         return self.forward(inputs['input_ids'], inputs['token_type_ids'], inputs['attention_mask'],
                             return_embeddings=True).cpu().numpy()
 
-    def forward(self, input_ids, token_type_ids, attention_mask, target_positions=None, return_embeddings=False):
+    def forward(self, input_ids, token_type_ids, attention_mask, target_positions=None, return_embeddings=False, cdr3b_sequences=None, long_sequences=None):
         """ Usual pytorch forward function.
         :param tokens: text sequences [batch_size x src_seq_len]
         :param lengths: source lengths [batch_size]
@@ -198,6 +208,20 @@ class ProtBertClassifier(pl.LightningModule):
         attention_mask = torch.tensor(attention_mask, device=self.device)
         word_embeddings = self.ProtBertBFD(input_ids,
                                            attention_mask)[0]
+        if cdr3b_sequences is not None:
+            seq_embs = []
+            # extract only the cdr3b embeddings
+            for seq_num in range(len(word_embeddings)):
+                start_cdr3 = long_sequences[seq_num].find(cdr3b_sequences[seq_num])
+                end_cdr3 = start_cdr3 + len(cdr3b_sequences[seq_num])
+                seq_embs.append(word_embeddings[seq_num][start_cdr3:end_cdr3])
+            # padd them with zeros
+            # TODO check if it pads at the end
+            embs = torch.nn.utils.rnn.pad_sequence(seq_embs, batch_first=True)
+            # throw the embeddings in the classifier and get predictions
+            preds = self.classification_head(embs.permute(0,2,1))
+            return preds
+
         if self.extract_emb:
             # used for extracting the actual embeddings after tuning
             return word_embeddings
@@ -536,6 +560,84 @@ def extract_and_save_embeddings(model=None, data_f_n="vdj_human_unique_longs.csv
             vdjdb_embeddings = {}
     if vdjdb_embeddings:
         pickle.dump(vdjdb_embeddings, open(emb_name + "_{}.bin".format(file_index), "wb"))
+
+def get_saliency_for_batch(model, batch):
+    retain_grads = []
+    long_b,epitopes_b,cdr3b_b = batch
+    def hook_(self, grad_inp, grad_out):
+        retain_grads.append((grad_out[0].cpu()))
+
+    model.requires_grad = True
+    model.unfreeze_encoder()
+
+    # this takes the gradients wrt. (input_embedding(aa_seq) + pos_enc(aa_seq))
+    handle = model.ProtBertBFD.embeddings.register_backward_hook(hook_)
+    # handle = model.ProtBertBFD.encoder.register_backward_hook(hook_)
+
+    current_inputs = {}
+
+    split_long_bs = []
+    for l in long_b:
+        split_long_bs.append(' '.join(list(l)))
+
+    inputs = model.tokenizer.batch_encode_plus(split_long_bs,
+                                               add_special_tokens=False,
+                                               padding=True,
+                                               truncation=True,
+                                               max_length=model.hparams.max_length)
+    current_inputs['input_ids'] = inputs['input_ids']
+    current_inputs['token_type_ids'] = inputs['token_type_ids']
+    current_inputs['attention_mask'] = inputs['attention_mask']
+    current_inputs['cdr3b_sequences'] = cdr3b_b
+    current_inputs['long_sequences'] = long_b
+    preds = torch.sigmoid(model.forward(**current_inputs))
+    for seq_ind, p in enumerate(torch.argmax(preds,dim=1)):
+        preds[seq_ind, p].backward(retain_graph=True)
+
+    handle.remove()
+    return retain_grads, torch.argmax(preds).detach().cpu().numpy()
+
+def get_saliency_map(model, data_f_n):
+    # model.ProtBertBFD.requires_grad=True
+    # onelasttime
+
+    model.zero_grad()
+    model.ProtBertBFD.zero_grad()
+    data = pd.read_csv(data_f_n, sep=",")
+    long = data['long']
+    epitopes = data['epitope']
+    cdr3b = data['cdr3b']
+    batch_size = 10
+    saliency_dictionary = {}
+    for i in range(int(np.ceil(len(long)/ batch_size))):
+        long_b = long[i * batch_size:(i + 1) * batch_size]
+        epitopes_b = epitopes[i * batch_size:(i + 1) * batch_size]
+        cdr3b_b = cdr3b[i * batch_size:(i + 1) * batch_size]
+        input_grads, preds = get_saliency_for_batch(model, [long_b,epitopes_b,cdr3b_b])
+        model.zero_grad()
+        # the gradients are of pred_i for element i in batch wrt. all inputs of size (batch_size, seq_len, emb_dim),
+        # meaning all off-diagonal grad [y_i(batch_element_j,:,:)] i!=j are simply 0;
+
+        # extract the (useful) diagonal elements grad [y_i(batch_element_i,:,:)]
+        input_grads = [input_grads[i][i,:,:].detach().cpu().numpy() for i in range(len(input_grads))]
+
+        # process them by [e_l: el = abs( sum_{i=1,emb_dim}; l=1,...,seq_len]
+        input_grads = [np.sum(np.abs(ie), axis=1) for ie in input_grads]
+        for i in range(batch_size):
+            cdr, lng = cdr3b_b[i], long_b[i]
+            cdr3_start,cdr3_end = lng.find(cdr), lng.find(cdr)+len(cdr)
+            plt.bar(list(range(cdr3_start)), input_grads[i][:cdr3_start], color='blue')
+            plt.bar(list(range(cdr3_start, cdr3_end)), input_grads[i][cdr3_start:cdr3_end], color='orange')
+            plt.bar(list(range(cdr3_end, len(lng))), input_grads[i][cdr3_end:len(lng)], color='blue')
+            plt.title(lng[0])
+            plt.show()
+        print(input_grads[0].shape)
+        exit(1)
+
+
+
+    # for d in dataset:
+
 
 def compute_embs(model, seqs, cdr3s=None):
     """
