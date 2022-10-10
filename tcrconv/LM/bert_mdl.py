@@ -196,7 +196,8 @@ class ProtBertClassifier(pl.LightningModule):
         return self.forward(inputs['input_ids'], inputs['token_type_ids'], inputs['attention_mask'],
                             return_embeddings=True).cpu().numpy()
 
-    def forward(self, input_ids, token_type_ids, attention_mask, target_positions=None, return_embeddings=False, cdr3b_sequences=None, long_sequences=None):
+    def forward(self, input_ids, token_type_ids, attention_mask, target_positions=None, return_embeddings=False, cdr3b_sequences=None, long_sequences=None,
+                cdr3a_sequences=None,long_sequences_a=None):
         """ Usual pytorch forward function.
         :param tokens: text sequences [batch_size x src_seq_len]
         :param lengths: source lengths [batch_size]
@@ -211,15 +212,28 @@ class ProtBertClassifier(pl.LightningModule):
         if cdr3b_sequences is not None:
             seq_embs = []
             # extract only the cdr3b embeddings
-            for seq_num in range(len(word_embeddings)):
+            for seq_num in range(len(cdr3b_sequences)):
                 start_cdr3 = long_sequences[seq_num].find(cdr3b_sequences[seq_num])
                 end_cdr3 = start_cdr3 + len(cdr3b_sequences[seq_num])
                 seq_embs.append(word_embeddings[seq_num][start_cdr3:end_cdr3])
+            # First half corresponds to cdr3b/longb seeqs, second to cdr3a/longa
+            for seq_num in range(len(cdr3a_sequences)):
+                start_cdr3 = long_sequences_a[seq_num].find(cdr3a_sequences[seq_num])
+                end_cdr3 = start_cdr3 + len(cdr3a_sequences[seq_num])
+                seq_embs.append(word_embeddings[seq_num+ len(cdr3b_sequences)][start_cdr3:end_cdr3])
             # padd them with zeros
             # TODO check if it pads at the end
             embs = torch.nn.utils.rnn.pad_sequence(seq_embs, batch_first=True)
             # throw the embeddings in the classifier and get predictions
-            preds = self.classification_head(embs.permute(0,2,1))
+            if cdr3a_sequences:
+                cdr3a_start = len(embs)//2
+                cdr3b = embs[:cdr3a_start]
+                cdr3b = cdr3b.permute(0,2,1)
+                cdr3a = embs[cdr3a_start:]
+                cdr3a  = cdr3a.permute(0,2,1)
+                preds = self.classification_head(cdr3b, cdr3a)
+            else:
+                preds = self.classification_head(embs.permute(0, 2, 1))
             return preds
 
         if self.extract_emb:
@@ -499,6 +513,7 @@ def extract_and_save_embeddings(model=None, data_f_n="vdj_human_unique_longs.csv
     """
     model = retrieve_model() if model is None else model
     model.cuda()
+    model.to(torch.float32)
     data = pd.read_csv(data_f_n, sep=separator)
     if cdr3_col is None:
         long = data[sequence_col]
@@ -516,7 +531,7 @@ def extract_and_save_embeddings(model=None, data_f_n="vdj_human_unique_longs.csv
         else:
             cropped_seqs.append(' '.join(list(l)))
         sequences.append(l)
-    inputs = model.tokenizer.batch_encode_plus(cropped_seqs,
+    inputs = model.tokenizer.batch_encode_plus(cropped_seqs[:10],
                                                add_special_tokens=False,
                                                padding=True,
                                                truncation=True,
@@ -540,6 +555,8 @@ def extract_and_save_embeddings(model=None, data_f_n="vdj_human_unique_longs.csv
         current_inputs['token_type_ids'] = inputs['token_type_ids'][i * 100:(i + 1) * 100]
         current_inputs['attention_mask'] = inputs['attention_mask'][i * 100:(i + 1) * 100]
         embedding = model.forward(**current_inputs)
+        pickle.dump([seqs[:10], embedding[:10]], open("check_embs.bin", "wb"))
+        exit(1)
         embedding = embedding.cpu().numpy()
         print("{} sequences have been extracted".format(i * 100))
         for seq_num in range(len(embedding)):
@@ -561,9 +578,10 @@ def extract_and_save_embeddings(model=None, data_f_n="vdj_human_unique_longs.csv
     if vdjdb_embeddings:
         pickle.dump(vdjdb_embeddings, open(emb_name + "_{}.bin".format(file_index), "wb"))
 
-def get_saliency_for_batch(model, batch):
+def get_saliency_for_batch(model, batch, batch_tcra, epitope2lbl=None):
     retain_grads = []
-    long_b,epitopes_b,cdr3b_b = batch
+    long_b,epitopes_b,cdr3_b = batch
+    long_a,cdr3_a = batch_tcra
     def hook_(self, grad_inp, grad_out):
         retain_grads.append((grad_out[0].cpu()))
 
@@ -579,6 +597,8 @@ def get_saliency_for_batch(model, batch):
     split_long_bs = []
     for l in long_b:
         split_long_bs.append(' '.join(list(l)))
+    for l in long_a:
+        split_long_bs.append(' '.join(list(l)))
 
     inputs = model.tokenizer.batch_encode_plus(split_long_bs,
                                                add_special_tokens=False,
@@ -588,55 +608,118 @@ def get_saliency_for_batch(model, batch):
     current_inputs['input_ids'] = inputs['input_ids']
     current_inputs['token_type_ids'] = inputs['token_type_ids']
     current_inputs['attention_mask'] = inputs['attention_mask']
-    current_inputs['cdr3b_sequences'] = cdr3b_b
+    current_inputs['cdr3b_sequences'] = cdr3_b
     current_inputs['long_sequences'] = long_b
+    current_inputs['cdr3a_sequences'] = cdr3_a
+    current_inputs['long_sequences_a'] = long_a
+
     preds = torch.sigmoid(model.forward(**current_inputs))
     for seq_ind, p in enumerate(torch.argmax(preds,dim=1)):
+        if epitope2lbl is not None:
+            p = epitope2lbl[epitopes_b[seq_ind]]
         preds[seq_ind, p].backward(retain_graph=True)
-
     handle.remove()
-    return retain_grads, torch.argmax(preds).detach().cpu().numpy()
+    return retain_grads, torch.argmax(preds,dim=1).detach().cpu().numpy()
 
-def get_saliency_map(model, data_f_n):
+
+def duplicate_cross_reactive_tcrs(long, epitopes, cdr3b, longa, cdr3a):
+    long_, epitopes_, cdr3b_, longa_, cdr3a_ = [],[],[],[],[]
+    for lb, ep, cb, la, ca in zip(long, epitopes, cdr3b, longa, cdr3a):
+        for ep_ in ep.split(" "):
+            long_.append(lb)
+            epitopes_.append(ep_)
+            cdr3b_.append(cb)
+            longa_.append(la)
+            cdr3a_.append(ca)
+    return long_, epitopes_, cdr3b_, longa_, cdr3a_
+
+def get_saliency_map(model, data_f_n, chains='B', epitope2lbl=None):
     # model.ProtBertBFD.requires_grad=True
     # onelasttime
 
+    model = retrieve_model() if model is None else model
     model.zero_grad()
     model.ProtBertBFD.zero_grad()
+    model.ProtBertBFD.eval()
+    model.extract_emb = True
+    model.eval()
+
     data = pd.read_csv(data_f_n, sep=",")
-    long = data['long']
-    epitopes = data['epitope']
-    cdr3b = data['cdr3b']
+    long = data['Long'].values
+    epitopes = data['Epitope'].values
+    cdr3b = data['CDR3B'].values
+
+    # TODO I didn't find some dictionary long_Tcra_2_cdr3a or equivalent, so this needs to be corrected
+    if chains == 'AB' or chains == 'BA':
+        longa = [l.replace(".","") for l in data['Long_a']]
+        cdr3a = [l[95:110] for l in longa]
+    else:
+        longa = None
+        cdr3a = None
+
+    if epitope2lbl is not None:
+        # if max pred is required, gradients are of the max-pred, otherwise multiple sets of gradients wrt to each
+        # associated epitope for a TCR are required
+        long, epitopes, cdr3b, longa, cdr3a = duplicate_cross_reactive_tcrs(long, epitopes, cdr3b, longa, cdr3a)
     batch_size = 10
-    saliency_dictionary = {}
+    saliency_results = []
     for i in range(int(np.ceil(len(long)/ batch_size))):
         long_b = long[i * batch_size:(i + 1) * batch_size]
         epitopes_b = epitopes[i * batch_size:(i + 1) * batch_size]
         cdr3b_b = cdr3b[i * batch_size:(i + 1) * batch_size]
-        input_grads, preds = get_saliency_for_batch(model, [long_b,epitopes_b,cdr3b_b])
+        if chains == "AB" or chains == "BA":
+            long_a = longa[i * batch_size:(i + 1) * batch_size]
+            cdr3_a = cdr3a[i * batch_size:(i + 1) * batch_size]
+        else:
+            long_a = []
+            cdr3_a = []
+        input_grads, preds = get_saliency_for_batch(model, [long_b,epitopes_b,cdr3b_b], [long_a, cdr3_a], epitope2lbl)
         model.zero_grad()
+
         # the gradients are of pred_i for element i in batch wrt. all inputs of size (batch_size, seq_len, emb_dim),
         # meaning all off-diagonal grad [y_i(batch_element_j,:,:)] i!=j are simply 0;
-
         # extract the (useful) diagonal elements grad [y_i(batch_element_i,:,:)]
-        input_grads = [input_grads[i][i,:,:].detach().cpu().numpy() for i in range(len(input_grads))]
+        input_grads_cdr3b = [input_grads[i][i,:,:].detach().cpu().numpy() for i in range(len(input_grads))]
+        input_grads_cdr3b = [np.sum(np.abs(ig), axis=1) for ig in input_grads_cdr3b]
 
+        if cdr3_a:
+            # input tensors to ProtBERT are [longb_1,longb_2, ..., longb_n, longa_1, longa_2, ..., longa_n] so gradiets
+            # wrt. cdra chains come on the second half of the tensors: i+len(cdr3b_b)
+            input_grads_cdr3a = [input_grads[i][i+batch_size,:,:].detach().cpu().numpy() for i in range(len(input_grads))]
+            input_grads_cdr3a = [np.sum(np.abs(ig),axis=1) for ig in input_grads_cdr3a]
+        else:
+            input_grads_cdr3a = [None for _ in range(len(input_grads_cdr3b))]
+
+
+        # gather all information
+        for ep, pred, ig_cdr3a, ig_cdr3b, lb, cb, la, ca in zip(epitopes, preds, input_grads_cdr3a, input_grads_cdr3b, long_b, cdr3b_b, long_a, cdr3_a):
+            saliency_results.append([ep, pred, ig_cdr3a, ig_cdr3b, lb, cb, la, ca])
+
+        # TODO remove at some point. barplots of saliency maps, useful for debugging
         # process them by [e_l: el = abs( sum_{i=1,emb_dim}; l=1,...,seq_len]
-        input_grads = [np.sum(np.abs(ie), axis=1) for ie in input_grads]
-        for i in range(batch_size):
-            cdr, lng = cdr3b_b[i], long_b[i]
-            cdr3_start,cdr3_end = lng.find(cdr), lng.find(cdr)+len(cdr)
-            plt.bar(list(range(cdr3_start)), input_grads[i][:cdr3_start], color='blue')
-            plt.bar(list(range(cdr3_start, cdr3_end)), input_grads[i][cdr3_start:cdr3_end], color='orange')
-            plt.bar(list(range(cdr3_end, len(lng))), input_grads[i][cdr3_end:len(lng)], color='blue')
-            plt.title(lng[0])
-            plt.show()
-        print(input_grads[0].shape)
-        exit(1)
+        # input_grads = [np.sum(np.abs(ie), axis=1) for ie in input_grads]
+        # for i in range(batch_size):
+        #     cdr, lng = cdr3b_b[i], long_b[i]
+        #     cdr3_start,cdr3_end = lng.find(cdr), lng.find(cdr)+len(cdr)
+        #     plt.bar(list(range(cdr3_start)), input_grads_cdr3b[i][:cdr3_start], color='blue')
+        #     plt.bar(list(range(cdr3_start, cdr3_end)), input_grads_cdr3b[i][cdr3_start:cdr3_end], color='orange')
+        #     plt.bar(list(range(cdr3_end, len(lng))), input_grads_cdr3b[i][cdr3_end:len(lng)], color='blue')
+        #     plt.title(lng[0])
+        #     plt.show()
+        #
+        #     if cdr3a:
+        #         cdra, lnga = cdr3a[i], longa[i]
+        #         cdr3_start,cdr3_end = lnga.find(cdra), lnga.find(cdra)+len(cdra)
+        #         plt.bar(list(range(cdr3_start)), input_grads_cdr3a[i][:cdr3_start], color='blue')
+        #         plt.bar(list(range(cdr3_start, cdr3_end)), input_grads_cdr3a[i][cdr3_start:cdr3_end], color='orange')
+        #         plt.bar(list(range(cdr3_end, len(lng))), input_grads_cdr3a[i][cdr3_end:len(lng)], color='blue')
+        #         plt.title(lng[0])
+        #         plt.show()
+        # print(input_grads[0].shape)
+        # exit(1)
 
+    return saliency_results
 
-
-    # for d in dataset:
 
 
 def compute_embs(model, seqs, cdr3s=None):
