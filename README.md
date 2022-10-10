@@ -45,10 +45,13 @@ pip install -e .
   * On commandline, run with --help to see descriptions for the possible inputs
   * For an example, see scripts/pred-b-small.sh
 
+## Pretrained models
+Torch state dictionaries for models trained with the VDJdb-b-small, VDJdb-b-large, and VDJdb-ab-large are available at models-folder. They are trained with the default parameters, according to shell-scripts in scripts folder (train-b-small, train-b-large, train-ab-large).
+
 
 ## References
-\[1\] Jokinen, E., Dumitrescu, A., Huuhtanen, J., Heinonen M., Gligorijevic, V., Bonneau, R., Mustjoki, S., Lähdesmäki, H. Determining recognition between T cell receptors and epitopes using contextualized motifs, *submitted* (2022) \
-\[2\] Bagaev, Dmitry V., et al. VDJdb in 2019: database extension, new analysis infrastructure and a T-cell receptor motif compendium. *Nucleic Acids Research* **48.D1** (2020): D1057-D1062. https://vdjdb.cdr3.net \
+\[1\] Jokinen, E., Dumitrescu, A., Huuhtanen, J., Heinonen M., Gligorijevic, V., Bonneau, R., Mustjoki, S., Lähdesmäki, H. Determining recognition between T cell receptors and epitopes using contextualized motifs, *submitted* (2022). Preprint available at bioRxiv (https://doi.org/10.1101/2022.05.23.493034) \
+\[2\] Bagaev, Dmitry V., et al. VDJdb in 2019: database extension, new analysis infrastructure and a T-cell receptor motif compendium. *Nucleic Acids Research* **48.D1** (2020): D1057-D1062. https://vdjdb.cdr3.net 
 
 ## Predictor
 Codes for the multilabel predictor.
@@ -84,3 +87,6 @@ Data:
 * [VDJDB](https://vdjdb.cdr3.net/)
 * [Dash et al.](https://www.nature.com/articles/nature22383) 
 * [Emerson et. al](https://www.nature.com/articles/ng.3822).
+
+## ScRNA+TCRab-seq analysis of bronchoalveolar lavage samples
+Implementation for the scRNA+TCRab-seq data analysis is available at https://github.com/janihuuh/tcrconv_manu 

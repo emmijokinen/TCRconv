@@ -24,11 +24,8 @@ with open(resfile,'w') as f:
 # Load TCRconv model
 model = utils.load_model(p['model_file'],p,p['num_features'],n_labels,device)
 # embeddings / embedding-models
-if p['LM_file'].lower() != 'none':
-    use_LM=True
+if p['use_LM']:
     LM=retrieve_model().to(device)
-else:
-    use_LM=False
 
 # Get requested sequences for genes
 geneseqs={}
@@ -83,7 +80,7 @@ for i in range(len(data)):
         ts_all =[np.array(t) for t in ts_all]
         if icount>0:
             I= np.array(I,dtype=bool)
-            if use_LM: # If LM is used, compute embeddings
+            if p['use_LM']: # If LM is used, compute embeddings
                 cdr3s = data[p['h_cdr31']][i0:i+1][I].values
                 print('computing embeddings: {:d}-{:d}/{:d}'.format(i0,i,imax))
                 if p['embedtype']=='cdr3+context':
