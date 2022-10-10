@@ -661,7 +661,7 @@ def get_saliency_map(model, data_f_n, chains='B', epitope2lbl=None):
         # if max pred is required, gradients are of the max-pred, otherwise multiple sets of gradients wrt to each
         # associated epitope for a TCR are required
         long, epitopes, cdr3b, longa, cdr3a = duplicate_cross_reactive_tcrs(long, epitopes, cdr3b, longa, cdr3a)
-    batch_size = 10
+    batch_size = 2
     saliency_results = []
     for i in range(int(np.ceil(len(long)/ batch_size))):
         long_b = long[i * batch_size:(i + 1) * batch_size]
@@ -692,9 +692,8 @@ def get_saliency_map(model, data_f_n, chains='B', epitope2lbl=None):
 
 
         # gather all information
-        for ep, pred, ig_cdr3a, ig_cdr3b, lb, cb, la, ca in zip(epitopes, preds, input_grads_cdr3a, input_grads_cdr3b, long_b, cdr3b_b, long_a, cdr3_a):
+        for ep, pred, ig_cdr3a, ig_cdr3b, lb, cb, la, ca in zip(epitopes_b, preds, input_grads_cdr3a, input_grads_cdr3b, long_b, cdr3b_b, long_a, cdr3_a):
             saliency_results.append([ep, pred, ig_cdr3a, ig_cdr3b, lb, cb, la, ca])
-
         # TODO remove at some point. barplots of saliency maps, useful for debugging
         # process them by [e_l: el = abs( sum_{i=1,emb_dim}; l=1,...,seq_len]
         # input_grads = [np.sum(np.abs(ie), axis=1) for ie in input_grads]
