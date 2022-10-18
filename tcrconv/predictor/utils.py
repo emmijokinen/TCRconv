@@ -1,5 +1,5 @@
 
-import models
+from tcrconv.predictor import models
 import torch
 from torch.utils.data import Dataset, DataLoader
 
@@ -170,6 +170,9 @@ def get_parameter_dict(predict=False):
         p_batch = parser.add_argument_group('Batch size')
         p_batch.add_argument('--batch_size',type=int, default=512,
                             help='Defines for how many sequences embeddings and predictions are computed at a time. If an LM is used instead of precomputed embeddings, using larger batch_size can be quicker but requires more memory.')
+        # Only needed when predict mode is used for creating saliency maps
+        p_data.add_argument('--h_epitope',type=str, default='Epitope',
+                            help='Column name for epitopes in dataset file. Not needed for predictions, only used when predict mode is used for creating saliency maps.')
 
     # Opt to use binary instead of multilabel classification
     p_data.add_argument('--binary', type=str2bool, default=False,
@@ -286,15 +289,15 @@ def create_resultfiles(p,n_categories):
     # based on parameter dictionary p
     if p['lossfile']!='None' and not path.isfile(p['lossfile']):
         with open(p['lossfile'],'w') as f:
-            writer=csv.writer(f,delimiter='\t')
+            writer=csv.writer(f,delimiter=p['delimiter'])
             writer.writerow(p['table'][0]+['Output type'])
     if p['lossfile_test']!='None' and not path.isfile(p['lossfile_test']):
         with open(p['lossfile_test'],'w') as f:
-            writer=csv.writer(f,delimiter='\t')
+            writer=csv.writer(f,delimiter=p['delimiter'])
             writer.writerow(p['table'][0]+['Output type'])
     if p['resultfile']!='None' and not path.isfile(p['resultfile']):
         with open(p['resultfile'],'w') as f:
-            writer=csv.writer(f,delimiter='\t')
+            writer=csv.writer(f,delimiter=p['delimiter'])
             header =p['table'][0]
             header += ['AUROC_'+str(i) for i in range(n_categories['test'])]+['AUROC_micro','AUROC_macro']
             header += ['AP_'+str(i) for i in range(n_categories['test'])]+['AP_micro','AP_macro']
