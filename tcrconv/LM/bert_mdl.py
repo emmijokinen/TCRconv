@@ -66,13 +66,7 @@ class ProtBertClassifier(pl.LightningModule):
         configUrl = 'https://www.dropbox.com/s/d3yw7v4tvi5f4sk/bert_config.json?dl=1'
         vocabUrl = 'https://www.dropbox.com/s/jvrleji50ql5m5i/vocab.txt?dl=1'
 
-        # TODO Remove hardcoded paths after u finished implementing saliency-map extraaction
-        if os.path.exists('/scratch/work/dumitra1'):
-            self.modelFolderPath = "/home/dumitra1/work/covid_tcr_protein_embeddings/models/ProtBert"
-            self.vocabFilePath = os.path.join(self.modelFolderPath, 'vocab.txt')
-        elif os.path.exists("/home/alex"):
-            self.modelFolderPath = '/home/alex/Desktop/covid_tcr_protein_embeddings/models/ProtBert'
-            self.vocabFilePath = os.path.join(self.modelFolderPath, 'vocab.txt')
+
         modelFolderPath = self.modelFolderPath
         modelFilePath = os.path.join(modelFolderPath, 'pytorch_model.bin')
         configFilePath = os.path.join(modelFolderPath, 'config.json')
@@ -578,10 +572,10 @@ def extract_and_save_embeddings(model=None, data_f_n="vdj_human_unique_longs.csv
     if vdjdb_embeddings:
         pickle.dump(vdjdb_embeddings, open(emb_name + "_{}.bin".format(file_index), "wb"))
 
-def get_saliency_for_batch(model, batch, batch_tcra, epitope2lbl=None):
+def get_saliency_for_batch(model, batch1, batch2, epitope2lbl=None):
     retain_grads = []
-    long_b,epitopes_b,cdr3_b = batch
-    long_a,cdr3_a = batch_tcra
+    long1_i, epitopes_i, cdr31_i = batch1
+    long2_i, cdr32_i = batch2
     def hook_(self, grad_inp, grad_out):
         retain_grads.append((grad_out[0].cpu()))
 
@@ -595,9 +589,9 @@ def get_saliency_for_batch(model, batch, batch_tcra, epitope2lbl=None):
     current_inputs = {}
 
     split_long_bs = []
-    for l in long_b:
+    for l in long1_i:
         split_long_bs.append(' '.join(list(l)))
-    for l in long_a:
+    for l in long2_i:
         split_long_bs.append(' '.join(list(l)))
 
     inputs = model.tokenizer.batch_encode_plus(split_long_bs,
@@ -608,34 +602,45 @@ def get_saliency_for_batch(model, batch, batch_tcra, epitope2lbl=None):
     current_inputs['input_ids'] = inputs['input_ids']
     current_inputs['token_type_ids'] = inputs['token_type_ids']
     current_inputs['attention_mask'] = inputs['attention_mask']
-    current_inputs['cdr3b_sequences'] = cdr3_b
-    current_inputs['long_sequences'] = long_b
-    current_inputs['cdr3a_sequences'] = cdr3_a
-    current_inputs['long_sequences_a'] = long_a
+    current_inputs['cdr3b_sequences'] = cdr31_i
+    current_inputs['long_sequences'] = long1_i
+    current_inputs['cdr3a_sequences'] = cdr32_i
+    current_inputs['long_sequences_a'] = long2_i
 
     preds = torch.sigmoid(model.forward(**current_inputs))
     for seq_ind, p in enumerate(torch.argmax(preds,dim=1)):
         if epitope2lbl is not None:
-            p = epitope2lbl[epitopes_b[seq_ind]]
-        preds[seq_ind, p].backward(retain_graph=True)
+            label_ind = epitope2lbl[epitopes_i[seq_ind]]
+        preds[seq_ind, label_ind].backward(retain_graph=True)
     handle.remove()
     return retain_grads, torch.argmax(preds,dim=1).detach().cpu().numpy()
 
 
-def duplicate_cross_reactive_tcrs(long, epitopes, cdr3b, longa, cdr3a):
-    long_, epitopes_, cdr3b_, longa_, cdr3a_ = [],[],[],[],[]
-    for lb, ep, cb, la, ca in zip(long, epitopes, cdr3b, longa, cdr3a):
-        for ep_ in ep.split(" "):
-            long_.append(lb)
-            epitopes_.append(ep_)
-            cdr3b_.append(cb)
-            longa_.append(la)
-            cdr3a_.append(ca)
-    return long_, epitopes_, cdr3b_, longa_, cdr3a_
+def duplicate_cross_reactive_tcrs(long1, epitopes, cdr31, long2=[], cdr32=[]):
+    long1_, epitopes_, cdr31_, long2_, cdr32_ = [],[],[],[],[]
+    if len(long2)>1:
+        for l1, ep, c1, l2, c2 in zip(long1, epitopes, cdr31, long2, cdr32):
+            for ep_ in ep.split(" "):
+                long1_.append(l1)
+                epitopes_.append(ep_)
+                cdr31_.append(c1)
+                long2_.append(l2)
+                cdr32_.append(c2)
+    else:
+        for l1, ep, c1 in zip(long1, epitopes, cdr31):
+            for ep_ in ep.split(" "):
+                long1_.append(l1)
+                epitopes_.append(ep_)
+                cdr31_.append(c1)
 
-def get_saliency_map(model, data_f_n, chains='B', epitope2lbl=None):
+    return long1_, epitopes_, cdr31_, long2_, cdr32_
+
+def get_saliency_map(model, p, epitope2lbl=None,abs=True):
     # model.ProtBertBFD.requires_grad=True
     # onelasttime
+    batch_size = p['batch_size']
+    chains = p['chains']
+
 
     model = retrieve_model() if model is None else model
     model.zero_grad()
@@ -644,56 +649,72 @@ def get_saliency_map(model, data_f_n, chains='B', epitope2lbl=None):
     model.extract_emb = True
     model.eval()
 
-    data = pd.read_csv(data_f_n, sep=",")
-    long = data['Long'].values
-    epitopes = data['Epitope'].values
-    cdr3b = data['CDR3B'].values
+    data = pd.read_csv(p['dataset'], sep=p['delimiter'])
+    epitopes = data[p['h_epitope']].values
 
-    # TODO I didn't find some dictionary long_Tcra_2_cdr3a or equivalent, so this needs to be corrected
-    if chains == 'AB' or chains == 'BA':
-        longa = [l.replace(".","") for l in data['Long_a']]
-        cdr3a = [l[95:110] for l in longa]
-    else:
-        longa = None
-        cdr3a = None
+    long1 = data[p['h_long1']].values
+    cdr31 = data[p['h_cdr31']].values
+
+    if len(chains)>1:
+        long2 = data[p['h_long2']].values
+        cdr32 = data[p['h_cdr32']].values
 
     if epitope2lbl is not None:
         # if max pred is required, gradients are of the max-pred, otherwise multiple sets of gradients wrt to each
         # associated epitope for a TCR are required
-        long, epitopes, cdr3b, longa, cdr3a = duplicate_cross_reactive_tcrs(long, epitopes, cdr3b, longa, cdr3a)
-    batch_size = 2
-    saliency_results = []
-    for i in range(int(np.ceil(len(long)/ batch_size))):
-        long_b = long[i * batch_size:(i + 1) * batch_size]
-        epitopes_b = epitopes[i * batch_size:(i + 1) * batch_size]
-        cdr3b_b = cdr3b[i * batch_size:(i + 1) * batch_size]
-        if chains == "AB" or chains == "BA":
-            long_a = longa[i * batch_size:(i + 1) * batch_size]
-            cdr3_a = cdr3a[i * batch_size:(i + 1) * batch_size]
+        if len(chains)>1:
+            long1, epitopes, cdr31, long2, cdr32 = duplicate_cross_reactive_tcrs(long1, epitopes, cdr31, long2, cdr32)
         else:
-            long_a = []
-            cdr3_a = []
-        input_grads, preds = get_saliency_for_batch(model, [long_b,epitopes_b,cdr3b_b], [long_a, cdr3_a], epitope2lbl)
+            long1, epitopes, cdr31, long2, cdr32 = duplicate_cross_reactive_tcrs(long1, epitopes, cdr31)
+
+    saliency_results = []
+    n_seqs = len(long1)
+    n_batches = int(np.ceil(n_seqs/ batch_size))
+    for i in range(n_batches):
+        print('batch ',i,'of',n_batches)
+        i_start = i * batch_size
+        i_end = min((i + 1) * batch_size, n_seqs)
+        long1_i = long1[i_start : i_end]
+        epitopes_i = epitopes[i_start : i_end]
+        cdr31_i = cdr31[i_start : i_end]
+        if len(chains)>1:
+            long2_i = long2[i_start : i_end]
+            cdr32_i = cdr32[i_start : i_end]
+        else:
+            long2_i = []
+            cdr32_i = []
+        input_grads, preds = get_saliency_for_batch(model, [long1_i,epitopes_i,cdr31_i], [long2_i, cdr32_i], epitope2lbl)
         model.zero_grad()
 
         # the gradients are of pred_i for element i in batch wrt. all inputs of size (batch_size, seq_len, emb_dim),
         # meaning all off-diagonal grad [y_i(batch_element_j,:,:)] i!=j are simply 0;
         # extract the (useful) diagonal elements grad [y_i(batch_element_i,:,:)]
-        input_grads_cdr3b = [input_grads[i][i,:,:].detach().cpu().numpy() for i in range(len(input_grads))]
-        input_grads_cdr3b = [np.sum(np.abs(ig), axis=1) for ig in input_grads_cdr3b]
-
-        if cdr3_a:
-            # input tensors to ProtBERT are [longb_1,longb_2, ..., longb_n, longa_1, longa_2, ..., longa_n] so gradiets
-            # wrt. cdra chains come on the second half of the tensors: i+len(cdr3b_b)
-            input_grads_cdr3a = [input_grads[i][i+batch_size,:,:].detach().cpu().numpy() for i in range(len(input_grads))]
-            input_grads_cdr3a = [np.sum(np.abs(ig),axis=1) for ig in input_grads_cdr3a]
+        input_grads_cdr31 = [input_grads[i][i,:,:].detach().cpu().numpy() for i in range(len(input_grads))]
+        if abs:
+            input_grads_cdr31 = [np.sum(np.abs(ig), axis=1) for ig in input_grads_cdr31]
         else:
-            input_grads_cdr3a = [None for _ in range(len(input_grads_cdr3b))]
+            input_grads_cdr31 = [np.sum(ig, axis=1) for ig in input_grads_cdr31]
+
+        if len(chains)>1:
+            # input tensors to ProtBERT are [long1_1,long1_2, ..., long1_n, long2_1, long2_2, ..., long2_n] so gradiets
+            # wrt. cdr32 come on the second half of the tensors: i+len(cdr31)
+
+            input_grads_cdr32 = [input_grads[i][i+len(input_grads_cdr31),:,:].detach().cpu().numpy() for i in range(len(input_grads))]
+            if abs:
+                input_grads_cdr32 = [np.sum(np.abs(ig),axis=1) for ig in input_grads_cdr32]
+            else:
+                input_grads_cdr32 = [np.sum(ig,axis=1) for ig in input_grads_cdr32]
+        else:
+            input_grads_cdr32 = [None for _ in range(len(input_grads_cdr31))]
 
 
         # gather all information
-        for ep, pred, ig_cdr3a, ig_cdr3b, lb, cb, la, ca in zip(epitopes_b, preds, input_grads_cdr3a, input_grads_cdr3b, long_b, cdr3b_b, long_a, cdr3_a):
-            saliency_results.append([ep, pred, ig_cdr3a, ig_cdr3b, lb, cb, la, ca])
+        if len(chains)>1:
+            for ep, pred, ig_cdr31, ig_cdr32, l1, c1, l2, c2 in zip(epitopes_i, preds, input_grads_cdr31, input_grads_cdr32, long1_i, cdr31_i, long2_i, cdr32_i):
+                saliency_results.append([ep, pred, ig_cdr31, ig_cdr32, l1, c1, l2, c2])
+        else:
+            for ep, pred, ig_cdr31, l1, c1 in zip(epitopes_i, preds, input_grads_cdr31, long1_i, cdr31_i):
+                saliency_results.append([ep, pred, ig_cdr31, l1, c1])
         # TODO remove at some point. barplots of saliency maps, useful for debugging
         # process them by [e_l: el = abs( sum_{i=1,emb_dim}; l=1,...,seq_len]
         # input_grads = [np.sum(np.abs(ie), axis=1) for ie in input_grads]
